@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth, googleProvider, db } from "@/lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 import { fetchYouTubeData } from "@/lib/youtube";
-import { Loader2, Youtube, CheckCircle, AlertCircle } from "lucide-react";
+import { generateUserProfile } from "@/lib/gemini"; // Import Gemini Service
+import { Loader2, Youtube, CheckCircle, AlertCircle, Brain } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
 export default function AnalyzePage() {
     const { user } = useAuth();
     const [connecting, setConnecting] = useState(false);
+    const [analyzing, setAnalyzing] = useState(false); // New state for AI processing
     const [ytData, setYtData] = useState(null);
     const [error, setError] = useState(null);
 
@@ -33,6 +36,24 @@ export default function AnalyzePage() {
             const data = await fetchYouTubeData(token);
             setYtData(data);
             console.log("YouTube Data Fetched:", data);
+
+            // SAVE TO FIRESTORE
+            const currentUser = user || result.user;
+            if (currentUser) {
+                await setDoc(doc(db, "users", currentUser.uid), {
+                    youtubeData: data,
+                    lastAnalyzed: new Date().toISOString()
+                }, { merge: true });
+                console.log(`Saved to Firestore for user: ${currentUser.uid}`);
+
+                /* 
+                // TRIGGER GEMINI ANALYSIS
+                setAnalyzing(true);
+                await generateUserProfile(currentUser.uid, data);
+                setAnalyzing(false);
+                console.log("Gemini Profile Generated!");
+                */
+            }
 
         } catch (err) {
             console.error(err);
@@ -82,14 +103,23 @@ export default function AnalyzePage() {
                             </button>
                         ) : (
                             <div className="w-full">
-                                <div className="bg-green-500/10 text-green-400 p-3 rounded-lg flex items-center justify-center gap-2 mb-4">
-                                    <CheckCircle className="w-4 h-4" />
-                                    Data Connected
-                                </div>
+                                {analyzing ? (
+                                    <div className="bg-purple-500/10 text-purple-400 p-4 rounded-lg flex items-center justify-center gap-3 mb-4 animate-pulse">
+                                        <Brain className="w-5 h-5 animate-pulse" />
+                                        <span>Sifting through your digital threads...</span>
+                                    </div>
+                                ) : (
+                                    <div className="bg-green-500/10 text-green-400 p-3 rounded-lg flex items-center justify-center gap-2 mb-4">
+                                        <CheckCircle className="w-4 h-4" />
+                                        Analysis Complete & Profile Created
+                                    </div>
+                                )}
+
                                 <div className="text-left text-sm text-gray-400 bg-black/40 p-4 rounded-lg overflow-hidden">
                                     <p>Found <strong>{ytData.likedVideos.length}</strong> liked videos</p>
                                     <p>Found <strong>{ytData.subscriptions.length}</strong> subscriptions</p>
                                     <p>Found <strong>{ytData.playlists.length}</strong> playlists</p>
+                                    <p>Channel Bio: <strong>{ytData.channelProfile ? "Found" : "Not Found"}</strong></p>
                                     <details className="mt-2 cursor-pointer">
                                         <summary>View Debug Data</summary>
                                         <pre className="mt-2 text-xs overflow-auto max-h-32">
@@ -97,6 +127,10 @@ export default function AnalyzePage() {
                                         </pre>
                                     </details>
                                 </div>
+                                <a href="/insights" className="btn btn-primary w-full mt-4 flex items-center justify-center gap-2">
+                                    <Brain className="w-4 h-4" />
+                                    View Insights
+                                </a>
                             </div>
                         )}
                         {error && (

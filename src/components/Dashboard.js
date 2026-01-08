@@ -33,14 +33,31 @@ export default function Dashboard({ user, profile }) {
                     <StatCard icon={<Target className="text-green-400" />} label="Goals Completed" value="0" />
                 </div>
 
-                {/* JSON Dump for Verification (Hidden in prod, useful now) */}
-                <div className="glass-panel p-8">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <BookOpen className="w-5 h-5 text-indigo-400" />
-                        User Data Collection
-                    </h2>
-                    <div className="bg-black/50 p-4 rounded-xl font-mono text-xs text-green-400 overflow-auto max-h-96">
-                        {JSON.stringify(profile, null, 2)}
+                {/* Action Card: Highlighted if no data */}
+                <div className={`glass-panel p-8 mb-8 transition-all duration-300 relative overflow-hidden group 
+                    ${!profile?.youtubeData ? 'border-2 border-red-500/50 shadow-[0_0_30px_rgba(220,38,38,0.3)]' : 'hover:bg-white/5'}`}>
+
+                    {!profile?.youtubeData && (
+                        <div className="absolute top-0 right-0 bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-bl-lg animate-pulse">
+                            ACTION REQUIRED
+                        </div>
+                    )}
+
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div>
+                            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                                <BookOpen className={`w-6 h-6 ${!profile?.youtubeData ? 'text-red-400' : 'text-indigo-400'}`} />
+                                {profile?.youtubeData ? "Analysis Complete" : "Start Your Analysis"}
+                            </h2>
+                            <p className="text-muted max-w-lg">
+                                {profile?.youtubeData
+                                    ? "Your digital footprint has been analyzed. View your insights or re-sync for updates."
+                                    : "Connect your YouTube account to uncover your hidden interests and generate a personalized learning roadmap."}
+                            </p>
+                        </div>
+                        <a href="/analyze" className={`btn ${!profile?.youtubeData ? 'bg-red-600 hover:bg-red-700' : 'btn-primary'} px-8 py-3 whitespace-nowrap`}>
+                            {profile?.youtubeData ? "View Insights" : "Connect YouTube"}
+                        </a>
                     </div>
                 </div>
             </div>

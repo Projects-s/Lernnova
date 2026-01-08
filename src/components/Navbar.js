@@ -9,16 +9,22 @@ export default function Navbar() {
 
     return (
         <nav className="w-full max-w-7xl px-6 py-8 flex justify-between items-center z-50">
-            <div className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                     <Sparkles className="text-white w-6 h-6" />
                 </div>
                 <span className="text-2xl font-bold tracking-tight text-white">Lernova</span>
-            </div>
+            </Link>
             <div className="hidden md:flex gap-8 items-center text-sm font-medium text-gray-300">
-                <a href="#features" className="hover:text-white transition-colors">Features</a>
-                <a href="#how-it-works" className="hover:text-white transition-colors">How it Works</a>
-                <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+                <a href="/#features" className="hover:text-white transition-colors">Features</a>
+                <a href="/#how-it-works" className="hover:text-white transition-colors">How it Works</a>
+                <a href="/#pricing" className="hover:text-white transition-colors">Pricing</a>
+                {user && (
+                    <>
+                        <Link href="/analyze" className="text-indigo-400 hover:text-indigo-300 transition-colors">Analyze</Link>
+                        <Link href="/insights" className="text-indigo-400 hover:text-indigo-300 transition-colors">Insights</Link>
+                    </>
+                )}
             </div>
             <div className="flex gap-4 items-center">
                 {loading ? (
