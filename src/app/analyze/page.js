@@ -89,6 +89,7 @@ export default function AnalyzePage() {
                                 <div className="text-left text-sm text-gray-400 bg-black/40 p-4 rounded-lg overflow-hidden">
                                     <p>Found <strong>{ytData.likedVideos.length}</strong> liked videos</p>
                                     <p>Found <strong>{ytData.subscriptions.length}</strong> subscriptions</p>
+                                    <p>Found <strong>{ytData.playlists.length}</strong> playlists</p>
                                     <details className="mt-2 cursor-pointer">
                                         <summary>View Debug Data</summary>
                                         <pre className="mt-2 text-xs overflow-auto max-h-32">
