@@ -30,8 +30,12 @@ export async function fetchYouTubeData(accessToken) {
             fetch(channelUrl, { headers })
         ]);
 
-        if (!likedResponse.ok) console.error("YT Liked Fetch Error", await likedResponse.text());
-        if (!subsResponse.ok) console.error("YT Subs Fetch Error", await subsResponse.text());
+        if (!likedResponse.ok || !subsResponse.ok) {
+            const errorText = await (!likedResponse.ok ? likedResponse : subsResponse).text();
+            console.error("YT Fetch Error", errorText);
+            throw new Error(`YouTube API error (${likedResponse.status}). Please ensure YouTube Data API v3 is enabled in Google Cloud Console.`);
+        }
+
         if (!playlistsResponse.ok) console.error("YT Playlists Fetch Error", await playlistsResponse.text());
         if (!channelResponse.ok) console.error("YT Channel Fetch Error", await channelResponse.text());
 

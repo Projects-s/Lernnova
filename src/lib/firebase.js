@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, GithubAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -17,6 +17,14 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
 googleProvider.addScope('https://www.googleapis.com/auth/youtube.readonly');
 
-export { auth, db, googleProvider };
+const githubProvider = new GithubAuthProvider();
+// We can ask for repo scopes if we want to see private repos, 
+// but even without scopes, a basic login allows us to use the token for public /user data
+githubProvider.addScope('read:user');
+githubProvider.addScope('user:email');
+
+export { auth, db, googleProvider, githubProvider };

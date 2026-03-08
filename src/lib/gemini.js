@@ -1,104 +1,228 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { db } from "./firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
-
-export async function generateUserProfile(userId, youtubeData) {
-    if (!youtubeData || !userId) {
-        throw new Error("Missing required data for analysis");
-    }
-
+// Helper to call internal Python unified AI endpoints safely
+async function callPythonBackend(endpoint, body) {
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-
-        // 1. Prepare the Prompt
-        const prompt = createAnalysisPrompt(youtubeData);
-
-        // 2. Generate Content
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
-
-        // 3. Parse JSON Result
-        // Clean up markdown code blocks if present
-        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const analysis = JSON.parse(jsonStr);
-
-        console.log("Gemini Analysis Result:", analysis);
-
-        // 4. Save to Firestore
-        const userRef = doc(db, "users", userId);
-        await updateDoc(userRef, {
-            interests: analysis.interests || [],
-            skills: analysis.skills || [],
-            learningStyle: analysis.learningStyle || {},
-            personalityTraits: analysis.personalityTraits || [],
-            suggestedCareers: analysis.suggestedCareers || [],
-            lastAnalyzed: new Date().toISOString()
+        const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
         });
 
-        return analysis;
-
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || data.error || `Failed to analyze via Backend at ${endpoint}`);
+        }
+        return data;
     } catch (error) {
-        console.error("Gemini Analysis Failed:", error);
+        console.error(`Backend call failed for ${endpoint}:`, error);
+        throw new Error(`Failed to communicate with the Python backend AI model. ` + error.message);
+    }
+}
+
+export async function analyzeYouTubeData(userId, ytData) {
+    if (!ytData || !userId) throw new Error("Missing required YouTube data");
+
+    const analysis = await callPythonBackend("/analyze/youtube", { data: ytData });
+
+    // Fetch current profile to merge top-level skills/interests
+    const userRef = doc(db, "users", userId);
+    const docSnap = await getDoc(userRef);
+    const currentData = docSnap.exists() ? docSnap.data() : {};
+
+    const mergedInterests = Array.from(new Set([...(currentData.interests || []), ...(analysis.interests || [])]));
+    const mergedSkills = Array.from(new Set([...(currentData.skills || []), ...(analysis.skills || [])]));
+    const mergedStrengths = Array.from(new Set([...(currentData.strengths || []), ...(analysis.personalityTraits || [])]));
+    const mergedCareers = Array.from(new Set([...(currentData.careers || []), ...(analysis.suggestedCareers || [])]));
+
+    await setDoc(userRef, {
+        interests: mergedInterests,
+        skills: mergedSkills,
+        strengths: mergedStrengths,
+        careers: mergedCareers,
+        youtube: {
+            analysis: analysis,
+            lastAnalyzed: new Date().toISOString()
+        }
+    }, { merge: true });
+    return analysis;
+}
+
+export async function analyzeGitHubData(userId, ghData) {
+    if (!ghData || !userId) throw new Error("Missing required GitHub data");
+
+    const analysis = await callPythonBackend("/analyze/github", { data: ghData });
+
+    // Fetch current profile to merge top-level skills/interests
+    const userRef = doc(db, "users", userId);
+    const docSnap = await getDoc(userRef);
+    const currentData = docSnap.exists() ? docSnap.data() : {};
+
+    const mergedInterests = Array.from(new Set([...(currentData.interests || []), ...(analysis.interests || [])]));
+    const mergedSkills = Array.from(new Set([...(currentData.skills || []), ...(analysis.skills || [])]));
+    const mergedCareers = Array.from(new Set([...(currentData.careers || []), ...(analysis.suggestedCareers || [])]));
+
+    await setDoc(userRef, {
+        interests: mergedInterests,
+        skills: mergedSkills,
+        careers: mergedCareers,
+        github: {
+            analysis: analysis,
+            lastAnalyzed: new Date().toISOString()
+        }
+    }, { merge: true });
+    return analysis;
+}
+
+export async function analyzeRedditData(userId, rdData) {
+    if (!rdData || !userId) throw new Error("Missing required Reddit data");
+
+    const analysis = await callPythonBackend("/analyze/reddit", { data: rdData });
+
+    // Fetch current profile to merge top-level skills/interests
+    const userRef = doc(db, "users", userId);
+    const docSnap = await getDoc(userRef);
+    const currentData = docSnap.exists() ? docSnap.data() : {};
+
+    const mergedInterests = Array.from(new Set([...(currentData.interests || []), ...(analysis.interests || [])]));
+    const mergedSkills = Array.from(new Set([...(currentData.skills || []), ...(analysis.skills || [])]));
+    const mergedStrengths = Array.from(new Set([...(currentData.strengths || []), ...(analysis.personalityTraits || [])]));
+    const mergedCareers = Array.from(new Set([...(currentData.careers || []), ...(analysis.suggestedCareers || [])]));
+
+    await setDoc(userRef, {
+        interests: mergedInterests,
+        skills: mergedSkills,
+        strengths: mergedStrengths,
+        careers: mergedCareers,
+        reddit: {
+            analysis: analysis,
+            lastAnalyzed: new Date().toISOString()
+        }
+    }, { merge: true });
+    return analysis;
+}
+
+export async function analyzeDocumentData(userId, docData) {
+    if (!docData || !userId) throw new Error("Missing required Document data");
+
+    const analysis = await callPythonBackend("/analyze/document", { data: docData });
+
+    // Fetch current profile to merge top-level skills/interests
+    const userRef = doc(db, "users", userId);
+    const docSnap = await getDoc(userRef);
+    const currentData = docSnap.exists() ? docSnap.data() : {};
+
+    const mergedInterests = Array.from(new Set([...(currentData.interests || []), ...(analysis.interests || [])]));
+    const mergedSkills = Array.from(new Set([...(currentData.skills || []), ...(analysis.skills || [])]));
+    const mergedCareers = Array.from(new Set([...(currentData.careers || []), ...(analysis.suggestedCareers || [])]));
+
+    await setDoc(userRef, {
+        interests: mergedInterests,
+        skills: mergedSkills,
+        careers: mergedCareers,
+        document: {
+            analysis: analysis,
+            lastAnalyzed: new Date().toISOString()
+        }
+    }, { merge: true });
+
+    return analysis;
+}
+
+export async function analyzeInstagramData(userId, igData) {
+    if (!igData || !userId) throw new Error("Missing required Instagram data");
+
+    const analysis = await callPythonBackend("/analyze/instagram", { data: igData });
+
+    // Fetch current profile to merge top-level skills/interests
+    const userRef = doc(db, "users", userId);
+    const docSnap = await getDoc(userRef);
+    const currentData = docSnap.exists() ? docSnap.data() : {};
+
+    const mergedInterests = Array.from(new Set([...(currentData.interests || []), ...(analysis.interests || [])]));
+    const mergedSkills = Array.from(new Set([...(currentData.skills || []), ...(analysis.skills || [])]));
+    const mergedStrengths = Array.from(new Set([...(currentData.strengths || []), ...(analysis.personalityTraits || [])]));
+    const mergedCareers = Array.from(new Set([...(currentData.careers || []), ...(analysis.suggestedCareers || [])]));
+
+    await setDoc(userRef, {
+        interests: mergedInterests,
+        skills: mergedSkills,
+        strengths: mergedStrengths,
+        careers: mergedCareers,
+        instagram: {
+            analysis: analysis,
+            lastAnalyzed: new Date().toISOString()
+        }
+    }, { merge: true });
+
+    return analysis;
+}
+export async function chatWithMentor(userProfile, history, message) {
+    return await callPythonBackend("/chat-mentor", { profile: userProfile, history: history, message: message });
+}
+
+export async function generateRoadmap(userProfile, selectedGoal = null, preferences = null) {
+    try {
+        const response = await fetch("/api/generate-roadmap", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                profile: userProfile,
+                selectedGoal: selectedGoal,
+                preferences: preferences
+            }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to generate roadmap");
+        return data;
+    } catch (error) {
+        console.error("Error in generateRoadmap:", error);
         throw error;
     }
 }
 
-function createAnalysisPrompt(data) {
-    // Extract relevant signals
-    const likedVideos = data.likedVideos.map(v =>
-        `- "${v.title}" (Category: ${v.categoryId}, Duration: ${v.duration})`
-    ).slice(0, 50).join("\n");
+export async function generateCareerSuggestions(userProfile) {
+    try {
+        const response = await fetch("/api/generate-suggestions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(userProfile),
+        });
 
-    const subscriptions = data.subscriptions.map(s => s.title).join(", ");
-
-    // Channel stats
-    const channelStats = data.channelProfile ? `
-    User is also a creator:
-    - Channel Name: ${data.channelProfile.title}
-    - Subscribers: ${data.channelProfile.subscriberCount}
-    - Keywords: ${data.channelProfile.keywords}
-    ` : "User is primarily a viewer.";
-
-    return `
-    You are an expert Career Counselor and Psychometric Analyst.
-    Analyze the following YouTube digital footprint of a user to determine their implicit interests, hard/soft skills, and learning personality.
-
-    ### USER DATA
-    
-    **Channel Profile:**
-    ${channelStats}
-
-    **Subscriptions:**
-    ${subscriptions}
-
-    **Recently Liked Videos:**
-    ${likedVideos}
-
-    ### INSTRUCTIONS
-    Based on this content consumption, generate a profile JSON.
-    1. **Interests**: High-level topics they are curious about (e.g., "AI", "History", "Cooking").
-    2. **Skills**: inferred hard or soft skills (e.g., "Python", "Public Speaking", "Data Analysis").
-    3. **Learning Style**: 
-       - "format": "Visual" | "Auditory" | "Practical" (Infer from video types: lectures vs tutorials vs essays)
-       - "depth": "Deep Diver" | "Broad Explorer" (Infer from video duration and topic variety)
-    4. **Personality Traits**: 5 adjectives description (e.g., "Curious", "Analytical").
-    5. **Suggested Careers**: 3 modern job titles that fit this mix.
-
-    ### OUTPUT FORMAT (JSON ONLY)
-    {
-        "interests": ["Current Affairs", "Coding", ...],
-        "skills": ["JavaScript", "Critical Thinking", ...],
-        "learningStyle": {
-            "format": "Visual",
-            "depth": "Deep Diver",
-            "reasoning": "User watches long-form video essays and coding tutorials."
-        },
-        "personalityTraits": ["Curious", ...],
-        "suggestedCareers": ["Full Stack Developer", ...]
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to generate suggestions");
+        return data;
+    } catch (error) {
+        console.error("Error in generateCareerSuggestions:", error);
+        throw error;
     }
-    `;
+}
+
+export async function recommendCourses(userProfile, goal, platform) {
+    try {
+        const response = await fetch("/api/recommend-courses", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                profile: userProfile,
+                goal: goal,
+                platform: platform
+            }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to recommend courses");
+        return data; // Array of courses
+    } catch (error) {
+        console.error("Error in recommendCourses:", error);
+        throw error;
+    }
 }

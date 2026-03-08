@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { auth, db, googleProvider } from "@/lib/firebase";
 
@@ -16,36 +16,41 @@ export const AuthProvider = ({ children }) => {
     const router = useRouter();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        let unsubscribeDoc = null;
+
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             try {
                 if (user) {
                     setUser(user);
-                    // Fetch user profile from Firestore
+                    // Fetch and listen to user profile from Firestore
                     const userRef = doc(db, "users", user.uid);
-                    const docSnap = await getDoc(userRef);
 
-                    if (docSnap.exists()) {
-                        setProfile(docSnap.data());
-                    } else {
-                        // Create new profile
-                        const newProfile = {
-                            uid: user.uid,
-                            email: user.email,
-                            displayName: user.displayName,
-                            photoURL: user.photoURL,
-                            interests: [],
-                            skills: [],
-                            progress: {},
-                            onboardingComplete: false,
-                            createdAt: serverTimestamp(),
-                            lastLogin: serverTimestamp(),
-                        };
-                        await setDoc(userRef, newProfile);
-                        setProfile(newProfile);
-                    }
+                    // Listen for realtime updates
+                    unsubscribeDoc = onSnapshot(userRef, async (docSnap) => {
+                        if (docSnap.exists()) {
+                            setProfile(docSnap.data());
+                        } else {
+                            // Create new profile
+                            const newProfile = {
+                                uid: user.uid,
+                                email: user.email || user.providerData?.[0]?.email || null,
+                                displayName: user.displayName || user.providerData?.[0]?.displayName || "Adventurer",
+                                photoURL: user.photoURL || user.providerData?.[0]?.photoURL || null,
+                                interests: [],
+                                skills: [],
+                                progress: {},
+                                onboardingComplete: false,
+                                createdAt: serverTimestamp(),
+                                lastLogin: serverTimestamp(),
+                            };
+                            await setDoc(userRef, newProfile);
+                            setProfile(newProfile);
+                        }
+                    });
                 } else {
                     setUser(null);
                     setProfile(null);
+                    if (unsubscribeDoc) unsubscribeDoc();
                 }
             } catch (error) {
                 console.error("Auth state change error:", error);
@@ -54,7 +59,10 @@ export const AuthProvider = ({ children }) => {
             }
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeDoc) unsubscribeDoc();
+        };
     }, []);
 
     const login = async () => {
@@ -65,13 +73,13 @@ export const AuthProvider = ({ children }) => {
 
             await setDoc(userRef, {
                 lastLogin: serverTimestamp(),
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL
+                email: user.email || user.providerData?.[0]?.email || null,
+                displayName: user.displayName || user.providerData?.[0]?.displayName || "Adventurer",
+                photoURL: user.photoURL || user.providerData?.[0]?.photoURL || null
             }, { merge: true });
 
-            // Redirect to dashboard (homepage) after login
-            router.push('/');
+            // Redirect to dashboard after login
+            router.push('/dashboard');
 
         } catch (error) {
             console.error("Login failed", error);

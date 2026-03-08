@@ -1,28 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, LogOut, User } from "lucide-react";
+import { Sparkles, LogOut, User, Settings } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Navbar() {
-    const { user, login, logout, loading } = useAuth();
+    const { user, profile, login, logout, loading } = useAuth();
+
+    const activeSlug = profile?.roadmap?.careerGoal
+        ? profile.roadmap.careerGoal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+        : 'setup';
 
     return (
-        <nav className="w-full max-w-7xl px-6 py-8 flex justify-between items-center z-50">
-            <Link href="/" className="flex items-center gap-3">
+        <nav className="w-full max-w-7xl mx-auto px-6 py-8 flex justify-between items-center z-50">
+            <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                     <Sparkles className="text-white w-6 h-6" />
                 </div>
                 <span className="text-2xl font-bold tracking-tight text-white">Lernova</span>
             </Link>
             <div className="hidden md:flex gap-8 items-center text-sm font-medium text-gray-300">
-                <a href="/#features" className="hover:text-white transition-colors">Features</a>
-                <a href="/#how-it-works" className="hover:text-white transition-colors">How it Works</a>
-                <a href="/#pricing" className="hover:text-white transition-colors">Pricing</a>
+                <a href="/#discovery" className="hover:text-white transition-colors">Profile Discovery</a>
+                <a href="/#architect" className="hover:text-white transition-colors">Career Architect</a>
+                <a href="/#mentor" className="hover:text-white transition-colors">AI Mentor</a>
+
                 {user && (
                     <>
                         <Link href="/analyze" className="text-indigo-400 hover:text-indigo-300 transition-colors">Analyze</Link>
                         <Link href="/insights" className="text-indigo-400 hover:text-indigo-300 transition-colors">Insights</Link>
+                        <Link href={`/learnings/${activeSlug}`} className="text-indigo-400 hover:text-indigo-300 transition-colors">Roadmap</Link>
+                        <Link href="/mentor" className="text-indigo-400 hover:text-indigo-300 transition-colors">Mentor</Link>
+                        <Link href="/settings" className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white" title="Settings">
+                            <Settings className="w-5 h-5" />
+                        </Link>
                     </>
                 )}
             </div>
@@ -32,12 +42,17 @@ export default function Navbar() {
                 ) : user ? (
                     <div className="flex items-center gap-4">
                         <div className="flex flex-col items-end">
-                            <span className="text-sm text-gray-300 hidden sm:block">Hi, {user.displayName?.split(' ')[0]}</span>
+                            <span className="text-sm text-gray-300 hidden sm:block">Hi, {(profile?.displayName || user.displayName)?.split(' ')[0]}</span>
                             {/* Show a mini badge if they have interests */}
                             {/* Accessing profile from context would need context update, assuming Navbar uses updated hook */}
                         </div>
-                        {user.photoURL ? (
-                            <img src={user.photoURL} alt="Profile" className="w-9 h-9 rounded-full border border-white/20" />
+                        {(profile?.photoURL || user.photoURL) ? (
+                            <img
+                                src={profile?.photoURL || user.photoURL}
+                                alt="Profile"
+                                className="w-9 h-9 rounded-full border border-white/20 object-cover"
+                                referrerPolicy="no-referrer"
+                            />
                         ) : (
                             <div className="w-9 h-9 rounded-full bg-indigo-500 flex items-center justify-center text-white">
                                 <User className="w-5 h-5" />
@@ -53,15 +68,9 @@ export default function Navbar() {
                     </div>
                 ) : (
                     <>
-                        <button
-                            onClick={login}
-                            className="text-sm font-semibold text-white px-4 py-2 hover:bg-white/5 rounded-lg transition-colors"
-                        >
+                        <button onClick={login} className="btn btn-primary text-sm py-2 px-6">
                             Log In
                         </button>
-                        <Link href="/analyze">
-                            <button className="btn btn-primary text-sm py-2 px-6">Get Started</button>
-                        </Link>
                     </>
                 )}
             </div>

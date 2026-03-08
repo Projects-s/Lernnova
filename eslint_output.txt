@@ -1,0 +1,10 @@
+
+C:\Users\kunur\OneDrive\Documents\lernova\src\app\analyze\page.js
+   52:8    warning  React Hook useEffect has a missing dependency: 'handleRedditCallback'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  408:146  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                          react/no-unescaped-entities
+  408:184  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                          react/no-unescaped-entities
+  527:144  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                          react/no-unescaped-entities
+  527:182  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                          react/no-unescaped-entities
+
+Γ£û 5 problems (4 errors, 1 warning)
+
