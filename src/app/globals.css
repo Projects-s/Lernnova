@@ -181,3 +181,20 @@
 .custom-scrollbar::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Audio Player Customization */
+.active-audio::-webkit-media-controls-enclosure {
+  background-color: rgba(79, 70, 229, 0.1);
+  border-radius: 99px;
+}
+
+.active-audio::-webkit-media-controls-panel {
+  background-color: transparent;
+}
+
+.active-audio::-webkit-media-controls-current-time-display,
+.active-audio::-webkit-media-controls-time-remaining-display {
+  color: #a5b4fc;
+  font-family: monospace;
+  font-size: 10px;
+}

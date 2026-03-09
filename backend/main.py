@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pypdf import PdfReader
 from docx import Document
@@ -7,12 +7,15 @@ import zipfile
 import csv
 import json
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
 import traceback
+import hashlib
 from dotenv import load_dotenv
+from notebooklm_utils import generate_notebooklm_artifact, get_generation_meta
 
 load_dotenv()
 
@@ -20,14 +23,21 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def get_roadmap_id(roadmap: dict) -> str:
+    """Derive a stable roadmap ID, hashing the goal if the ID is missing."""
+    rid = roadmap.get("id")
+    if rid:
+        return str(rid)
+    goal = roadmap.get("careerGoal", "temp")
+    created = roadmap.get("createdAt", "")
+    return hashlib.md5(f"{goal}_{created}".encode()).hexdigest()[:10]
+
 # Configure Gemini
 api_key = os.getenv("GEMINI_API_KEY") or os.getenv("NEXT_PUBLIC_GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
-else:
-    print("Warning: GEMINI_API_KEY not found in environment variables")
+client = genai.Client(api_key=api_key) if api_key else None
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+LONG_CONTEXT_MODEL = os.getenv("LONG_CONTEXT_MODEL", "gemini-3-flash-preview")
 
 app = FastAPI()
 
@@ -45,6 +55,7 @@ class GoalRequest(BaseModel):
     profile: ProfileData
     selectedGoal: Optional[str] = None
     preferences: Optional[dict] = None
+    additionalContext: Optional[str] = None
 
 class CourseRecommendationRequest(BaseModel):
     goal: str
@@ -58,6 +69,56 @@ class ChatRequest(BaseModel):
     profile: dict
     history: list
     message: str
+
+class StepExplanationRequest(BaseModel):
+    stepTitle: str
+    taskTitle: str
+    careerGoal: str
+    profile: ProfileData
+
+@app.post("/generate-step-explanation")
+async def generate_step_explanation(request: StepExplanationRequest):
+    try:
+        context = to_json_str(request.profile)
+        
+        prompt = f"""
+        You are an expert tutor on Lernova. Provide a deep, structured, and pedagogical explanation for the following learning task:
+        Career Goal: {request.careerGoal}
+        Roadmap Pillar: {request.stepTitle}
+        Specific Learning Task: {request.taskTitle}
+        
+        ### USER CONTEXT (Analyze their interests/skills to personalize the analogies)
+        {context}
+        
+        ### INSTRUCTIONS
+        Create a high-impact, technical tutorial. Break it down into 5-7 bite-sized "Knowledge Blocks".
+        For each block:
+        1. "heading": A short, punchy technical sub-title (max 5 words).
+        2. "content": Exactly ONE deep technical paragraph (about 3-5 sentences). Do not use multiple paragraphs in one block. Use technical depth appropriate for someone pursuing this specific goal.
+        
+        The goal is to provide a "milestone-based" reading experience where the user can mark off each specific concept as they finish reading it.
+        
+        Return a JSON array of blocks exactly matching this schema:
+        [
+            {{
+                "heading": "...",
+                "content": "...",
+                "read": false
+            }}
+        ]
+        """
+        
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        text = extract_json(response.text)
+        return json.loads(text)
+    except Exception as e:
+        logger.error(f"Error generating step explanation: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 app.add_middleware(
     CORSMiddleware,
@@ -296,8 +357,11 @@ async def analyze_youtube(request: AnalyzeRequest):
             "suggestedCareers": ["...", "..."]
         }}"""
 
-        model = genai.GenerativeModel(GEMINI_MODEL, generation_config={"response_mime_type": "application/json"})
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -342,8 +406,11 @@ async def analyze_github(request: AnalyzeRequest):
             "suggestedCareers": ["Frontend Engineer", "DevOps"]
         }}"""
 
-        model = genai.GenerativeModel(GEMINI_MODEL, generation_config={"response_mime_type": "application/json"})
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -379,8 +446,11 @@ async def analyze_reddit(request: AnalyzeRequest):
             "suggestedCareers": ["...", "..."]
         }}"""
 
-        model = genai.GenerativeModel(GEMINI_MODEL, generation_config={"response_mime_type": "application/json"})
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -422,8 +492,11 @@ async def analyze_document(request: AnalyzeRequest):
             "suggestedCareers": ["...", "..."]
         }}"""
 
-        model = genai.GenerativeModel(GEMINI_MODEL, generation_config={"response_mime_type": "application/json"})
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -471,8 +544,11 @@ async def analyze_instagram(request: AnalyzeRequest):
             "suggestedCareers": ["...", "..."]
         }}"""
 
-        model = genai.GenerativeModel(GEMINI_MODEL, generation_config={"response_mime_type": "application/json"})
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -483,8 +559,6 @@ async def analyze_instagram(request: AnalyzeRequest):
 @app.post("/generate-suggestions")
 async def generate_suggestions(profile: ProfileData):
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        
         context = to_json_str(profile)
         
         prompt = f"""
@@ -513,7 +587,11 @@ async def generate_suggestions(profile: ProfileData):
         }}
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -524,8 +602,6 @@ async def generate_suggestions(profile: ProfileData):
 @app.post("/generate-roadmap")
 async def generate_roadmap_endpoint(request: GoalRequest):
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        
         context = to_json_str(request.profile)
         selected_goal = request.selectedGoal or "their most likely career goal based on data"
         
@@ -535,6 +611,10 @@ async def generate_roadmap_endpoint(request: GoalRequest):
             for k, v in request.preferences.items():
                 pref_str += f"- {k}: {v}\n"
         
+        extra_context_str = ""
+        if request.additionalContext:
+            extra_context_str = f"\n### ADDITIONAL USER INSTRUCTIONS\n{request.additionalContext}\n"
+        
         prompt = f"""
         Generate a comprehensive, lengthier, and highly detailed personalized learning roadmap from beginner to advanced to help the user reach the following goal: {selected_goal}. 
         The number of steps should scale from 4 up to 8 depending on their "Desired Pace" (relax/steady = more numerous, detailed steps; bootcamp = fewer, intensive steps).
@@ -542,6 +622,7 @@ async def generate_roadmap_endpoint(request: GoalRequest):
         ### USER DATA
         {context}
         {pref_str}
+        {extra_context_str}
 
         Make sure the learning journey perfectly aligns with their profile AND their stated learning preferences.
         Critically: Break down each roadmap step into 3-5 specific micro-tasks. 
@@ -587,7 +668,11 @@ async def generate_roadmap_endpoint(request: GoalRequest):
         }}
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -598,12 +683,6 @@ async def generate_roadmap_endpoint(request: GoalRequest):
 @app.post("/recommend-courses")
 async def recommend_courses(request: CourseRecommendationRequest):
     try:
-        # Deep thinking model with Google Search Grounding enabled
-        model = genai.GenerativeModel(
-            'gemini-3-flash-preview',
-            tools=[{"google_search_retrieval": {}}]
-        )
-        
         # EXTRACT COMPACT PROFILE ONLY to save thousands of tokens
         compact_profile = {
             "skills": request.profile.skills,
@@ -613,41 +692,51 @@ async def recommend_courses(request: CourseRecommendationRequest):
         context = json.dumps(compact_profile)
         
         prompt = f"""
-        You are an expert technical education advisor with access to comprehensive internet knowledge. 
-        The user's SPECIFIC career goal is: "{request.goal}". 
-        CRITICAL: Do NOT provide generic suggestions. Every single course MUST be 100% relevant to this exact niche goal. If the goal is "IoT Solutions Architect", do not suggest a generic "Meta Full-Stack Developer" course unless you explicitly explain how it applies to IoT.
-        Their target learning platform is: "{request.platform}".
+        You are a world-class educational consultant. Your mission is to PINPOINT the top 5 absolute best, highest-quality learning resources for a specific niche goal.
         
-        ### USER SUMMARY (Skills & Interests)
+        The user's EXACT career goal is: "{request.goal}".
+        The target platform is: "{request.platform}".
+        
+        ### USER PROFILE (Context)
         {context}
         
-        Search your deep knowledge base and recommend the top 5 BEST, most highly-rated, and 100% relevant courses on {request.platform} for the goal "{request.goal}".
+        ### MISSION
+        Find 5 specific, high-impact courses or playlists that will take the user from their current level to mastery in "{request.goal}". 
+        Avoid generic "intro to programming" courses unless strictly necessary for this specific path.
         
-        EXTREME CRITICAL RULES:
-        1. RELEVANCE: You MUST NOT suggest a generic course (e.g., "Full Stack Web Development") if the user's goal is specific (e.g., "IoT Solutions Architect"). If you cannot find a highly specific match, do not include it. The course MUST contain material directly related to the exact goal.
-        2. VERIFICATION: Only suggest real, verified courses that you know exist with high certainty. Do not hallucinate course names.
-        3. LINKS (NO 404s!): DO NOT guess the course's direct URL or domain slug. Instead, ALWAYS return a verified search URL that is guaranteed to work.
+        ### EXTREME PINPOINTING RULES:
+        1. RELEVANCE: Every recommendation must be directly tied to "{request.goal}". If the goal is "LLM Generation", do not suggest as generic "Python for Beginners" course. Suggest "Advanced LLM Fine-tuning with PyTorch" instead.
+        2. VERIFICATION: Use your search tool to confirm the courses are currently active, highly-rated (4.5+ or equivalent), and have significant enrollment.
+        3. LINKS: To ensure the links never break (404s), follow these platform-specific search query formats:
            - Coursera: https://www.coursera.org/search?query={{URL_ENCODED_COURSE_NAME}}
            - Udemy: https://www.udemy.com/courses/search/?src=ukw&q={{URL_ENCODED_COURSE_NAME}}
            - YouTube: https://www.youtube.com/results?search_query={{URL_ENCODED_COURSE_NAME}}
-        4. REVIEWS: You MUST explicitly state the general rating and review volume in the description (e.g. "Rated 4.8 with 10k+ reviews"). You MUST perform a Google Search to verify this rating.
-        5. MODULES: You MUST provide an accurate count of the number of modules/weeks in the courses. You MUST perform a Google Search to verify this count.
+           
+        4. DESCRIPTIONS: Write a 3-sentence powerful justification for why THIS specific course is the perfect "Deep Dive" for their goal.
+        5. RATINGS: Mention the rating and number of reviews in the description (e.g. "Rated 4.9 by 15k+ professionals").
+        6. MODULES: Provide an accurate count of modules or weeks.
         
         Return a JSON array of exactly 5 objects:
         [
             {{
                 "id": "course_1",
-                "title": "Exact Course Name (e.g., 'Deep Learning Specialization')",
+                "title": "Pinpointed Course Title (e.g. 'Natural Language Processing Specialization')",
                 "provider": "{request.platform}",
-                "instructor": "Instructor or University Name",
-                "description": "2-sentence compelling description of why it fits their SPECIFIC goal. Mention its high ratings/reviews.",
-                "modules": 10,
+                "instructor": "Specific University or Instructor Name",
+                "description": "Specific reasoning: Why this fits their goal + Verified Rating/Reviews.",
+                "modules": 8,
                 "link": "The safe search query URL as specified above."
             }}
         ]
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=LONG_CONTEXT_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearchRetrieval())]
+            )
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
@@ -658,8 +747,6 @@ async def recommend_courses(request: CourseRecommendationRequest):
 @app.post("/chat-mentor")
 async def chat_mentor(request: ChatRequest):
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL, generation_config={"response_mime_type": "application/json"})
-        
         context = json.dumps(request.profile)
         history_str = "\n".join([f"{'User' if h.get('role') == 'user' else 'Mentor'}: {h.get('content')}" for h in request.history])
 
@@ -667,7 +754,7 @@ async def chat_mentor(request: ChatRequest):
         You are the "Lernova Mentor", a high-end career coach, technical expert, and personalized learning assistant.
         You must be able to answer ALL kinds of questions, including deep technical questions, hardware troubleshooting, coding queries, and career advice.
         
-        ### USER ANALYZED PROFILE (Context)
+        ### USER ANALYZED PROFILE & CURRENT ROADMAP PROGRESS (Context)
         {context}
 
         ### CONVERSATION HISTORY
@@ -676,18 +763,24 @@ async def chat_mentor(request: ChatRequest):
         ### NEW USER MESSAGE
         "{request.message}"
 
+        ### YOUR SPECIFIC ABILITIES
+        1. PROGRESS TRACKING: You have access to the user's "activeRoadmap". When they ask about progress, check "activeRoadmap.steps". 
+           - Count specifically how many tasks are "completed" across all steps or in the current one.
+           - Mention specifically what "is next" by looking at the first "locked" or "current but incomplete" step.
+        2. COURSE GUIDANCE: You can see the "courses" object inside "activeRoadmap". If they've generated Coursera/Udemy/YouTube recommendations, talk about them by name and explain how they fit their niche goal.
+        3. ROADMAP UPDATES: If the user indicates they finished a task or step, you can suggest a "suggestedRoadmapUpdate" to mark steps as "completed" and unlock the next ones.
+        4. TECHNICAL DEPTH: If they ask how to do something (e.g., "how to use PyTorch"), answer it directly with expert-level detail.
+
         ### INSTRUCTIONS
-        1. FIRST, analyze the user's question. If it is a technical question (e.g., "connect a motor to an esp32"), answer it directly and thoroughly. You are an expert in all technical domains.
-        2. Keep the user's profile in mind. If their profile/context is relevant to their question, use it to personalize your answer. However, DO NOT force their profile into the answer if it's a general technical question.
-        3. Provide a helpful, encouraging, and highly specific response.
-        4. Reference their actual skills or interests if it helps structure the answer, but avoid generic references.
-        5. If they ask for a path or goals, suggest concrete steps.
-        6. If they state they finished a current step or ask to move on, you MUST update the roadmap progress. Mark old steps as "completed" and open up the next step as "current".
-        7. VERY IMPORTANT: If you suggest a roadmap update, you MUST preserve or generate the "tasks" array (with type and resource) inside each step, otherwise they will be deleted from the UI!
+        - FORMATTING: Use Markdown for professional structure.
+        - **BOLDING IS MANDATORY**: You MUST wrap all technical terms, tool names, course titles, and milestones in **double asterisks** (e.g., **PyTorch**, **Step 1**, **Completed**).
+        - **STRICT RULE**: NEVER use single quotes (') for emphasis. If you want to highlight something, use **BOLD**. 
+        - **LISTS**: Use bullet points for any lists of steps or progress items.
+        - **VOICE**: Authoritative, technical, yet encouraging. Personalize using their `activeRoadmap`.
 
         Return a JSON object:
         {{
-            "message": "Your main response text here...",
+            "message": "Your Markdown response here (use **bold**, NOT single quotes)...",
             "suggestedRoadmapUpdate": null | [
                 {{
                     "id": "1", 
@@ -706,13 +799,127 @@ async def chat_mentor(request: ChatRequest):
         }}
         """
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
         text = extract_json(response.text)
         return json.loads(text)
     except Exception as e:
         logger.error(f"Error in mentor chat: {e}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-podcast")
+async def generate_podcast(request: dict, background_tasks: BackgroundTasks):
+    try:
+        roadmap = request.get("roadmap")
+        user_id = request.get("userId")
+        user_profile = request.get("userProfile")
+        
+        if not roadmap or not user_id:
+            raise HTTPException(status_code=400, detail="Missing roadmap or userId")
+            
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        public_dir = os.path.join(project_root, "public", "podcasts")
+        os.makedirs(public_dir, exist_ok=True)
+        
+        roadmap_id = get_roadmap_id(roadmap)
+        filename = f"podcast_{user_id}_{roadmap_id}.mp3"
+        output_path = os.path.join(public_dir, filename)
+        
+        if os.path.exists(output_path):
+            return {"status": "ready", "audioUrl": f"/podcasts/{filename}"}
+
+        # Start the generation in the background
+        background_tasks.add_task(generate_notebooklm_artifact, roadmap, output_path, "audio", user_profile, user_id)
+        
+        return {
+            "status": "processing", 
+            "message": "Podcast generation started in background.",
+            "checkUrl": f"/check-podcast?userId={user_id}&roadmapId={roadmap_id}"
+        }
+    except Exception as e:
+        logger.error(f"Error in generate_podcast: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-video")
+async def generate_video(request: dict, background_tasks: BackgroundTasks):
+    try:
+        roadmap = request.get("roadmap")
+        user_id = request.get("userId")
+        user_profile = request.get("userProfile")
+        
+        if not roadmap or not user_id:
+            raise HTTPException(status_code=400, detail="Missing roadmap or userId")
+            
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(backend_dir)
+        public_dir = os.path.join(project_root, "public", "videos")
+        os.makedirs(public_dir, exist_ok=True)
+        
+        roadmap_id = get_roadmap_id(roadmap)
+        filename = f"video_{user_id}_{roadmap_id}.mp4"
+        output_path = os.path.join(public_dir, filename)
+        
+        if os.path.exists(output_path):
+            return {"status": "ready", "videoUrl": f"/videos/{filename}"}
+
+        # Start the generation in the background
+        background_tasks.add_task(generate_notebooklm_artifact, roadmap, output_path, "video", user_profile, user_id)
+        
+        return {
+            "status": "processing", 
+            "message": "Video generation started in background. This will take about 5-10 minutes.",
+            "checkUrl": f"/check-video?userId={user_id}&roadmapId={roadmap_id}"
+        }
+    except Exception as e:
+        logger.error(f"Error in generate_video: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/check-video")
+async def check_video(userId: str, roadmapId: str):
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(backend_dir)
+    filename = f"video_{userId}_{roadmapId}.mp4"
+    public_path = os.path.join(project_root, "public", "videos", filename)
+    
+    meta = get_generation_meta(public_path)
+    
+    if os.path.exists(public_path):
+        return {"status": "ready", "videoUrl": f"/videos/{filename}", "meta": meta}
+    
+    if not meta:
+        return {"status": "not_started", "message": "No generation has been started for this video yet."}
+
+    if meta.get("status") == "failed":
+        return {"status": "failed", "message": meta.get("error", "Generation failed"), "meta": meta}
+        
+    return {"status": "processing", "message": "Video is still being generated...", "meta": meta}
+
+@app.get("/check-podcast")
+async def check_podcast(userId: str, roadmapId: str):
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(backend_dir)
+    filename = f"podcast_{userId}_{roadmapId}.mp3"
+    public_path = os.path.join(project_root, "public", "podcasts", filename)
+    
+    meta = get_generation_meta(public_path)
+    
+    if os.path.exists(public_path):
+        return {"status": "ready", "audioUrl": f"/podcasts/{filename}", "meta": meta}
+    
+    if not meta:
+        return {"status": "not_started", "message": "No generation has been started for this podcast yet."}
+
+    if meta.get("status") == "failed":
+        return {"status": "failed", "message": meta.get("error", "Generation failed"), "meta": meta}
+        
+    return {"status": "processing", "message": "Podcast is still being generated...", "meta": meta}
 
 if __name__ == "__main__":
     import uvicorn

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { generateRoadmap, generateCareerSuggestions } from "@/lib/gemini";
-import { BookOpen, Trophy, Target, Star, Database, Youtube, Github, MessageCircle, FileText, Instagram, ArrowRight, Zap, Briefcase, UserCircle, RefreshCw, Loader2, Check } from "lucide-react";
+import { BookOpen, Trophy, Target, Star, Database, Youtube, Github, MessageCircle, FileText, Instagram, ArrowRight, Zap, Briefcase, UserCircle, RefreshCw, Loader2, Check, Award } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function Dashboard({ user, profile }) {
@@ -12,6 +12,7 @@ export default function Dashboard({ user, profile }) {
     // Initialize from DB if they exist, otherwise empty
     const [aiSuggestions, setAiSuggestions] = useState(profile?.aiSuggestions || []);
     const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+    const [customGoal, setCustomGoal] = useState("");
     const router = useRouter();
 
     // Update local state if profile.aiSuggestions changes (e.g., from DB sync)
@@ -81,7 +82,7 @@ export default function Dashboard({ user, profile }) {
     };
 
     const handleSelectGoal = async (goal) => {
-        if (!user) return;
+        if (!user || !goal) return;
 
         // If they click on a suggestion that already exists in their history, intelligently route them to resume it!
         const historicMatch = profile?.roadmapHistory?.find(r => r.careerGoal === goal);
@@ -91,6 +92,13 @@ export default function Dashboard({ user, profile }) {
         }
 
         router.push(`/setup?goal=${encodeURIComponent(goal)}`);
+    };
+
+    const handleCustomGoalSubmit = (e) => {
+        e.preventDefault();
+        if (customGoal.trim()) {
+            handleSelectGoal(customGoal.trim());
+        }
     };
 
     const calculateProgress = (roadmap) => {
@@ -318,9 +326,9 @@ export default function Dashboard({ user, profile }) {
 
                             {/* Learning History Section */}
                             {(() => {
-                                const historyData = profile?.roadmapHistory || [];
+                                const historyData = (profile?.roadmapHistory || []).filter(r => !r.achieved);
                                 // If no official history exists yet but they have an active roadmap, mock it as history of 1
-                                const displayHistory = historyData.length > 0 ? historyData : (profile?.roadmap ? [{ ...profile.roadmap, id: 'legacy-id', createdAt: profile.lastRoadmapUpdate }] : []);
+                                const displayHistory = historyData.length > 0 ? historyData : (profile?.roadmap && !profile.roadmap.achieved ? [{ ...profile.roadmap, id: 'legacy-id', createdAt: profile.lastRoadmapUpdate }] : []);
 
                                 return (
                                     <div className="mb-16 pb-16 relative" id="learning-history">
@@ -393,6 +401,63 @@ export default function Dashboard({ user, profile }) {
                                     </div>
                                 );
                             })()}
+
+                            {/* Achievements / Hall of Fame Section */}
+                            {profile?.achievements && profile.achievements.length > 0 && (
+                                <div className="mb-16 pb-16 relative" id="achievements">
+                                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[100vw] h-[3px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent pointer-events-none"></div>
+                                    <h2 className="text-2xl font-black tracking-tighter text-white mb-8 uppercase flex items-center gap-3">
+                                        <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                                            <Trophy className="w-6 h-6 text-emerald-400" />
+                                        </div>
+                                        Hall of Fame
+                                    </h2>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {profile.achievements.map((achievement, idx) => {
+                                            const dateString = achievement.achievedAt
+                                                ? new Date(achievement.achievedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+                                                : "Mastered Pathway";
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    onClick={() => router.push(`/achievements/${achievement.slug || achievement.id}`)}
+                                                    className="glass-panel p-6 border border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all flex flex-col relative overflow-hidden group cursor-pointer"
+                                                >
+                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-bl-full translate-x-1/2 -translate-y-1/2 blur-2xl group-hover:bg-emerald-500/20 transition-all pointer-events-none"></div>
+
+                                                    <div className="flex justify-between items-start mb-6">
+                                                        <div>
+                                                            <div className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest block mb-1">{dateString}</div>
+                                                            <h3 className="font-black text-xl text-white group-hover:text-emerald-300 transition-colors">{achievement.careerGoal}</h3>
+                                                        </div>
+                                                        <div className="p-2.5 bg-emerald-500/20 rounded-2xl border border-emerald-500/30 shrink-0 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                                                            <Award className="w-6 h-6 text-emerald-400" />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-auto">
+                                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3">Skills Gained</p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {(achievement.skills || []).slice(0, 5).map((skill, sIdx) => (
+                                                                <span key={sIdx} className="px-3 py-1 bg-white/5 border border-white/10 text-emerald-300/80 rounded-lg text-[10px] font-semibold hover:border-emerald-500/30 hover:bg-emerald-500/10 transition-colors">
+                                                                    {skill}
+                                                                </span>
+                                                            ))}
+                                                            {(achievement.skills || []).length > 5 && (
+                                                                <span className="px-3 py-1 bg-white/5 border border-white/10 text-gray-400 rounded-lg text-[10px] font-semibold">
+                                                                    +{(achievement.skills || []).length - 5} more
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Suggested Goals Module */}
                             <div className="mb-16">
@@ -530,6 +595,41 @@ export default function Dashboard({ user, profile }) {
                                         )}
                                     </div>
                                 )}
+                            </div>
+
+                            {/* Direct Goal Entry Section */}
+                            <div className="mb-24">
+                                <div className="glass-panel p-12 border border-white/10 bg-gradient-to-br from-indigo-500/10 via-transparent to-purple-500/10 relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-500/20 transition-all"></div>
+                                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 group-hover:bg-purple-500/20 transition-all"></div>
+
+                                    <div className="relative z-10 text-center max-w-2xl mx-auto">
+                                        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-500/20 rounded-full text-[10px] font-black uppercase tracking-widest text-indigo-300 border border-indigo-500/30 mb-8">
+                                            <Target className="w-3 h-3" />
+                                            Define Your Own Path
+                                        </div>
+                                        <h2 className="text-4xl font-black text-white mb-4 tracking-tighter uppercase italic">Have a specific goal in mind?</h2>
+                                        <p className="text-gray-400 mb-10 text-lg">Type any career ambition—from "Senior Rust Engineer" to "Astro-Physicist"—and our AI will engineer a specialized roadmap just for you.</p>
+
+                                        <form onSubmit={handleCustomGoalSubmit} className="relative group/form">
+                                            <input
+                                                type="text"
+                                                value={customGoal}
+                                                onChange={(e) => setCustomGoal(e.target.value)}
+                                                placeholder="e.g. Master Prompt Engineering for LLMs"
+                                                className="w-full bg-white/5 border-2 border-white/10 rounded-3xl py-6 px-8 text-xl text-white placeholder:text-gray-600 focus:border-indigo-500/50 focus:bg-indigo-500/5 transition-all outline-none shadow-2xl group-hover/form:border-white/20"
+                                            />
+                                            <button
+                                                type="submit"
+                                                disabled={!customGoal.trim()}
+                                                className="absolute right-3 top-3 bottom-3 px-8 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-800 disabled:text-gray-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs transition-all flex items-center gap-2 active:scale-95 shadow-xl shadow-indigo-600/20"
+                                            >
+                                                Architect Path
+                                                <ArrowRight className="w-4 h-4" />
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
                             </div>
 
 

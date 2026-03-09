@@ -2,7 +2,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
-import { generateRoadmap } from "@/lib/gemini";
+import { generateRoadmap, generatePodcast } from "@/lib/gemini";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles, BookOpen, BrainCircuit, Activity, Target } from "lucide-react";
@@ -37,8 +37,10 @@ function SetupContent() {
     }, [user, loading, router]);
 
     const [isGenerating, setIsGenerating] = useState(false);
+    const [personalize, setPersonalize] = useState(true);
+    const [additionalContext, setAdditionalContext] = useState("");
     const [preferences, setPreferences] = useState({
-        format: "Visual & Interactive",
+        format: "Reading & Writing",
         approach: "Practical (Project-based)",
         pace: "Steady & Consistent"
     });
@@ -62,14 +64,31 @@ function SetupContent() {
         if (!user) return;
         setIsGenerating(true);
         try {
-            const detailed = getDetailedProfile();
-            const roadmapData = await generateRoadmap(detailed, goal, preferences);
+            // Respect personalization toggle: if off, send minimal profile
+            const detailed = personalize ? getDetailedProfile() : { interests: [], skills: [], strengths: [] };
+            const roadmapData = await generateRoadmap(detailed, goal, preferences, additionalContext);
 
             const newRoadmap = {
                 ...roadmapData,
                 createdAt: new Date().toISOString(),
                 id: Date.now().toString(),
+                preferences: preferences
             };
+
+            // If auditory, generate a podcast
+            if (preferences.format === "Auditory & Discussions") {
+                try {
+                    const result = await generatePodcast(user.uid, newRoadmap);
+                    newRoadmap.podcastUrl = result?.audioUrl || null;
+                    newRoadmap.podcastMeta = {
+                        status: result?.status || 'unknown',
+                        message: result?.message || (result?.status === 'ready' ? 'Ready' : 'Processing...'),
+                        ...(result?.meta || {})
+                    };
+                } catch (podError) {
+                    console.error("Podcast generation failed, but continuing with roadmap:", podError);
+                }
+            }
 
             const currentHistory = profile?.roadmapHistory || [];
 
@@ -138,9 +157,31 @@ function SetupContent() {
                 </div>
 
                 <div className="glass-panel p-10 border border-white/5 mb-10">
-                    <p className="text-gray-300 text-lg leading-relaxed mb-10">
-                        Before the AI generates the precise technical steps for your roadmap to <strong className="text-white">"{goal}"</strong>, we want to know how you prefer to conquer this challenge. We'll tailor the exact resources and micro-tasks to match your psychology.
-                    </p>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 pb-10 border-b border-white/5">
+                        <div className="max-w-xl">
+                            <p className="text-gray-300 text-lg leading-relaxed">
+                                Before the AI generates the precise technical steps for your roadmap to <strong className="text-white">"{goal}"</strong>, we want to know how you prefer to conquer this challenge.
+                            </p>
+                        </div>
+
+                        {/* Personalization Toggle */}
+                        <div
+                            onClick={() => setPersonalize(!personalize)}
+                            className={`shrink-0 flex items-center gap-4 px-6 py-4 rounded-2xl border cursor-pointer transition-all ${personalize ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-white/5 border-white/10 opacity-70'}`}
+                        >
+                            <div className="flex flex-col">
+                                <span className={`text-xs font-black uppercase tracking-widest ${personalize ? 'text-indigo-400' : 'text-gray-500'}`}>
+                                    Personalization
+                                </span>
+                                <span className="text-white font-bold text-sm">
+                                    {personalize ? "Personalize for me" : "Generic roadmap"}
+                                </span>
+                            </div>
+                            <div className={`w-12 h-6 rounded-full relative transition-all ${personalize ? 'bg-indigo-600' : 'bg-white/10'}`}>
+                                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${personalize ? 'right-1' : 'left-1'}`} />
+                            </div>
+                        </div>
+                    </div>
 
                     {/* Format Preference */}
                     <div className="mb-12">
@@ -220,6 +261,24 @@ function SetupContent() {
                                 title="Relaxed Explorer"
                                 desc="No rush. Following rabbit holes and learning purely for the joy of the journey."
                             />
+                        </div>
+                    </div>
+
+                    {/* Additional Context */}
+                    <div className="mt-12 pt-10 border-t border-white/5">
+                        <h3 className="text-xl font-bold mb-6 flex items-center gap-3 uppercase tracking-wider text-gray-200">
+                            Additional Instructions
+                        </h3>
+                        <div className="relative group">
+                            <textarea
+                                value={additionalContext}
+                                onChange={(e) => setAdditionalContext(e.target.value)}
+                                placeholder="E.g. 'I already know basic Python', 'Focus more on high-performance C', 'Explain everything using space analogies'..."
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-gray-200 focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-gray-600 min-h-[120px] resize-none"
+                            />
+                            <div className="absolute right-4 bottom-4 text-[10px] font-black uppercase tracking-widest text-indigo-500/30">
+                                Optional Context
+                            </div>
                         </div>
                     </div>
                 </div>

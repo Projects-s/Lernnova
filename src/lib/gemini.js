@@ -162,7 +162,7 @@ export async function chatWithMentor(userProfile, history, message) {
     return await callPythonBackend("/chat-mentor", { profile: userProfile, history: history, message: message });
 }
 
-export async function generateRoadmap(userProfile, selectedGoal = null, preferences = null) {
+export async function generateRoadmap(userProfile, selectedGoal = null, preferences = null, additionalContext = null) {
     try {
         const response = await fetch("/api/generate-roadmap", {
             method: "POST",
@@ -172,7 +172,8 @@ export async function generateRoadmap(userProfile, selectedGoal = null, preferen
             body: JSON.stringify({
                 profile: userProfile,
                 selectedGoal: selectedGoal,
-                preferences: preferences
+                preferences: preferences,
+                additionalContext: additionalContext
             }),
         });
 
@@ -225,4 +226,75 @@ export async function recommendCourses(userProfile, goal, platform) {
         console.error("Error in recommendCourses:", error);
         throw error;
     }
+}
+
+export async function generatePodcast(userId, roadmap, userProfile) {
+    try {
+        const response = await fetch("/api/generate-podcast", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId, roadmap, userProfile }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to generate podcast");
+        return data; // Returns { status, audioUrl?, message? }
+    } catch (error) {
+        console.error("Error in generatePodcast:", error);
+        throw error;
+    }
+}
+
+export async function checkPodcastStatus(userId, roadmapId) {
+    try {
+        const response = await fetch(`/api/check-podcast?userId=${userId}&roadmapId=${roadmapId}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to check podcast status");
+        return data; // Returns { status, audioUrl?, message? }
+    } catch (error) {
+        console.error("Error in checkPodcastStatus:", error);
+        throw error;
+    }
+}
+
+export async function generateVideo(userId, roadmap, userProfile) {
+    try {
+        const response = await fetch("/api/generate-video", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId, roadmap, userProfile }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to generate video");
+        return data; // Returns { status, videoUrl?, message? }
+    } catch (error) {
+        console.error("Error in generateVideo:", error);
+        throw error;
+    }
+}
+
+export async function checkVideoStatus(userId, roadmapId) {
+    try {
+        const response = await fetch(`/api/check-video?userId=${userId}&roadmapId=${roadmapId}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to check video status");
+        return data; // Returns { status, videoUrl?, message? }
+    } catch (error) {
+        console.error("Error in checkVideoStatus:", error);
+        throw error;
+    }
+}
+
+export async function generateStepExplanation(userProfile, careerGoal, stepTitle, taskTitle) {
+    return await callPythonBackend("/generate-step-explanation", {
+        profile: userProfile,
+        careerGoal: careerGoal,
+        stepTitle: stepTitle,
+        taskTitle: taskTitle
+    });
 }

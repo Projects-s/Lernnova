@@ -1,15 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles, LogOut, User, Settings } from "lucide-react";
+import { Sparkles, LogOut, User, Settings, Home } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Navbar() {
     const { user, profile, login, logout, loading } = useAuth();
-
-    const activeSlug = profile?.roadmap?.careerGoal
-        ? profile.roadmap.careerGoal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-        : 'setup';
 
     return (
         <nav className="w-full max-w-7xl mx-auto px-6 py-8 flex justify-between items-center z-50">
@@ -20,6 +16,11 @@ export default function Navbar() {
                 <span className="text-2xl font-bold tracking-tight text-white">Lernova</span>
             </Link>
             <div className="hidden md:flex gap-8 items-center text-sm font-medium text-gray-300">
+                {user && (
+                    <Link href="/" className="text-indigo-400 hover:text-indigo-300 transition-colors p-2 hover:bg-white/10 rounded-full transition-all" title="Home">
+                        <Home className="w-5 h-5" />
+                    </Link>
+                )}
                 <a href="/#discovery" className="hover:text-white transition-colors">Profile Discovery</a>
                 <a href="/#architect" className="hover:text-white transition-colors">Career Architect</a>
                 <a href="/#mentor" className="hover:text-white transition-colors">AI Mentor</a>
@@ -28,7 +29,6 @@ export default function Navbar() {
                     <>
                         <Link href="/analyze" className="text-indigo-400 hover:text-indigo-300 transition-colors">Analyze</Link>
                         <Link href="/insights" className="text-indigo-400 hover:text-indigo-300 transition-colors">Insights</Link>
-                        <Link href={`/learnings/${activeSlug}`} className="text-indigo-400 hover:text-indigo-300 transition-colors">Roadmap</Link>
                         <Link href="/mentor" className="text-indigo-400 hover:text-indigo-300 transition-colors">Mentor</Link>
                         <Link href="/settings" className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white" title="Settings">
                             <Settings className="w-5 h-5" />
@@ -43,8 +43,6 @@ export default function Navbar() {
                     <div className="flex items-center gap-4">
                         <div className="flex flex-col items-end">
                             <span className="text-sm text-gray-300 hidden sm:block">Hi, {(profile?.displayName || user.displayName)?.split(' ')[0]}</span>
-                            {/* Show a mini badge if they have interests */}
-                            {/* Accessing profile from context would need context update, assuming Navbar uses updated hook */}
                         </div>
                         {(profile?.photoURL || user.photoURL) ? (
                             <img
